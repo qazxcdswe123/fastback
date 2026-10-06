@@ -19,7 +19,7 @@ package net.pcal.fastback.neoforge;
 
 import net.minecraft.client.Minecraft;
 import net.neoforged.bus.api.IEventBus;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
@@ -38,15 +38,9 @@ import static net.pcal.fastback.common.mod.Mod.mod;
 class NeoForgeClientInitializer {
 
     static void init(IEventBus modEventBus) {
-        final boolean[] initialized = {false};
-        // We need the Minecraft client instance to build ClientHelper, so we defer until the first tick.
-        NeoForge.EVENT_BUS.addListener((ClientTickEvent.Pre event) -> {
-            if (!initialized[0]) {
-                initialized[0] = true;
-                final Minecraft client = Minecraft.getInstance();
-                Mod.initializeForClient(new NeoForgeLoaderHelper(true), new ClientHelper(client));
-            }
-        });
+        // Quick Play can start the integrated server before the first client tick.
+        modEventBus.addListener((FMLClientSetupEvent event) -> event.enqueueWork(() ->
+                Mod.initializeForClient(new NeoForgeLoaderHelper(true), new ClientHelper(Minecraft.getInstance()))));
         NeoForge.EVENT_BUS.addListener((RenderGuiLayerEvent.Post event) ->
                 mod().renderHud(event.getGuiGraphics()));
         NeoForge.EVENT_BUS.addListener((ServerStartingEvent event) ->

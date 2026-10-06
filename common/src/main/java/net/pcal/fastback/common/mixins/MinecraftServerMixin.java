@@ -41,7 +41,7 @@ public class MinecraftServerMixin {
      * Intercept the call to saveAll that triggers on autosave, pass it through and then send out notification that
      * the autosave is done.
      */
-    @Redirect(method = "autoSave()V",
+    @Redirect(method = "tickServer(Ljava/util/function/BooleanSupplier;)V",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;saveEverything(ZZZ)Z"), remap = false)
     public boolean fastback_saveAll(MinecraftServer instance, boolean suppressLogs, boolean flush, boolean force) {
         boolean result = instance.saveEverything(suppressLogs, flush, force);

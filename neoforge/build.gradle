@@ -1,5 +1,6 @@
 plugins {
     id 'net.neoforged.moddev'
+    id 'com.gradleup.shadow'
     id 'com.modrinth.minotaur'
     id 'net.darkhax.curseforgegradle'
 }
@@ -13,28 +14,31 @@ repositories {
     maven { url = 'https://maven.neoforged.net/' }
 }
 
+// Keep the Git stack in one private namespace: SSHD core/common have split packages,
+// which NeoForge 1.21.1's JPMS loader rejects when they are separate jar-in-jar modules.
+configurations {
+    shadedLibraries {
+        canBeConsumed = false
+    }
+    implementation.extendsFrom shadedLibraries
+}
+
 dependencies {
     // common module - needed for IntelliJ to resolve the project dependency
     compileOnly project(':common')
 
     // jgit and dependencies
-    implementation("org.eclipse.jgit:org.eclipse.jgit:${jgit_version}") { transitive = false }
-    jarJar("org.eclipse.jgit:org.eclipse.jgit:${jgit_version}") { transitive = false }
+    shadedLibraries("org.eclipse.jgit:org.eclipse.jgit:${jgit_version}") { transitive = false }
 
-    implementation("com.googlecode.javaewah:JavaEWAH:${JavaEWAH_version}") { transitive = false }
-    jarJar("com.googlecode.javaewah:JavaEWAH:${JavaEWAH_version}") { transitive = false }
+    shadedLibraries("com.googlecode.javaewah:JavaEWAH:${JavaEWAH_version}") { transitive = false }
 
-    implementation("org.eclipse.jgit:org.eclipse.jgit.ssh.apache:${jgit_version}") { transitive = false }
-    jarJar("org.eclipse.jgit:org.eclipse.jgit.ssh.apache:${jgit_version}") { transitive = false }
+    shadedLibraries("org.eclipse.jgit:org.eclipse.jgit.ssh.apache:${jgit_version}") { transitive = false }
 
-    implementation("org.apache.sshd:sshd-core:${apache_sshd_version}") { transitive = false }
-    jarJar("org.apache.sshd:sshd-core:${apache_sshd_version}") { transitive = false }
+    shadedLibraries("org.apache.sshd:sshd-core:${apache_sshd_version}") { transitive = false }
 
-    implementation("org.apache.sshd:sshd-common:${apache_sshd_version}") { transitive = false }
-    jarJar("org.apache.sshd:sshd-common:${apache_sshd_version}") { transitive = false }
+    shadedLibraries("org.apache.sshd:sshd-common:${apache_sshd_version}") { transitive = false }
 
-    implementation("net.i2p.crypto:eddsa:${eddsa_version}") { transitive = false }
-    jarJar("net.i2p.crypto:eddsa:${eddsa_version}") { transitive = false }
+    shadedLibraries("net.i2p.crypto:eddsa:${eddsa_version}") { transitive = false }
 }
 
 neoForge {
@@ -60,6 +64,9 @@ neoForge {
     }
 }
 
+// Created by neoForge.version; ordinary libraries otherwise stay out of 1.21.1 dev runs.
+configurations.additionalRuntimeClasspath.extendsFrom configurations.shadedLibraries
+
 sourceSets {
     main {
         java { srcDir project(":common").file("src/main/java") }
@@ -79,6 +86,7 @@ processResources {
 }
 
 jar {
+    archiveClassifier = 'thin'
     from("LICENSE") {
         rename { "${it}_${archives_base_name}" }
     }
@@ -89,6 +97,28 @@ jar {
     }
 }
 
+shadowJar {
+    configurations = [project.configurations.shadedLibraries]
+    archiveClassifier = ''
+    relocate 'org.eclipse.jgit', 'net.pcal.fastback.shaded.jgit'
+    relocate 'org.apache.sshd', 'net.pcal.fastback.shaded.sshd'
+    relocate 'com.googlecode.javaewah', 'net.pcal.fastback.shaded.javaewah'
+    relocate 'net.i2p.crypto', 'net.pcal.fastback.shaded.crypto'
+
+    // ServiceLoader must still discover the relocated JGit SSH implementation.
+    filesMatching(['META-INF/services/**', 'META-INF/LICENSE', 'META-INF/NOTICE']) {
+        duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    }
+    mergeServiceFiles()
+    append 'META-INF/LICENSE'
+    append 'META-INF/NOTICE'
+    from(rootProject.file('LICENSE')) {
+        rename { "${it}_${archives_base_name}" }
+    }
+}
+
+assemble.dependsOn shadowJar
+
 // Publishing configuration
 modrinth {
     token = System.getenv("MODRINTH_TOKEN")
@@ -96,7 +126,7 @@ modrinth {
     versionNumber = mod_version
     versionName = "${mod_version} (neoforge)"
     versionType = "release"
-    uploadFile = jar
+    uploadFile = shadowJar
     changelog = "<p><a href='${github_projectUrl}/releases/tag/${mod_version}'>${github_projectUrl}/releases/tag/${mod_version}</a></p>"
     gameVersions = [minecraft_version]
     loaders = ["neoforge"]
@@ -106,11 +136,11 @@ import net.darkhax.curseforgegradle.TaskPublishCurseForge
 
 tasks.register('publishCurseForge', TaskPublishCurseForge) {
     apiToken = System.getenv("CURSEFORGE_TOKEN") ?: 'CURSEFORGE_TOKEN NOT_SET'
-    def mainFile = upload(curseforge_projectId, jar)
+    def mainFile = upload(curseforge_projectId, shadowJar)
     mainFile.releaseType = "release"
     mainFile.changelog = "${github_projectUrl}/releases/tag/${mod_version}"
     mainFile.changelogType = "markdown"
     mainFile.addGameVersion(minecraft_version)
     mainFile.addModLoader("NeoForge")
-    dependsOn(jar)
+    dependsOn(shadowJar)
 }

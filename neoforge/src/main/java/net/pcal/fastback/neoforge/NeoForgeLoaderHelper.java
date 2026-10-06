@@ -19,8 +19,6 @@ package net.pcal.fastback.neoforge;
 
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.server.permissions.Permission;
-import net.minecraft.server.permissions.PermissionLevel;
 import net.neoforged.fml.ModList;
 import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.common.NeoForge;
@@ -95,9 +93,8 @@ class NeoForgeLoaderHelper implements LoaderHelper {
     public void registerBackupCommand(boolean isForClient,
                                       Function<PermissionsFactory<CommandSourceStack>, LiteralArgumentBuilder<CommandSourceStack>> builder) {
         final int requiredLevel = isForClient ? 0 : 4;
-        final PermissionLevel permLevel = PermissionLevel.byId(requiredLevel);
         final LiteralArgumentBuilder<CommandSourceStack> backupCommand =
-                builder.apply(permName -> source -> source.permissions().hasPermission(new Permission.HasCommandLevel(permLevel)));
+                builder.apply(permName -> source -> source.hasPermission(requiredLevel));
         NeoForge.EVENT_BUS.addListener((RegisterCommandsEvent event) -> {
             event.getDispatcher().register(backupCommand);
             syslog().debug("registered backup command");
